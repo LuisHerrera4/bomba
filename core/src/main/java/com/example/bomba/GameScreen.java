@@ -1,11 +1,12 @@
 package com.example.bomba;
 
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.math.Rectangle;
+import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.Array;
 
 public class GameScreen implements Screen {
@@ -15,25 +16,53 @@ public class GameScreen implements Screen {
     Player player;
     Array<Enemy> enemies;
     Array<PowerUp> powerUps;
+    Array<Bomb> bombs;
+
+    // Botones táctiles
+    private Texture btnUp, btnDown, btnLeft, btnRight, btnBomb;
+    private Rectangle rectBtnUp, rectBtnDown, rectBtnLeft, rectBtnRight, rectBtnBomb;
 
     public GameScreen(final MyBombermanGame game) {
         this.game = game;
         camera = new OrthographicCamera();
-        camera.setToOrtho(false, 800, 480); // Ejemplo de viewport
+        camera.setToOrtho(false, 800, 480);
 
+        // Inicializamos el mapa
         gameMap = new GameMap();
-        player = new Player(64, 64); // Posición inicial del jugador
 
-        // Creamos dos enemigos con movimiento aleatorio básico
-        enemies = new Array<Enemy>();
-        enemies.add(new Enemy(200, 200));
-        enemies.add(new Enemy(300, 300));
+        // Colocar a los 4 personajes en cada esquina (del área interior, ya que el borde es pared).
+        // Usamos GameMap.TILE_SIZE para calcular la posición según celdas.
+        // Esquina inferior izquierda (jugador): (fila 1, columna 1)
+        player = new Player(1 * GameMap.TILE_SIZE, 1 * GameMap.TILE_SIZE);
 
-        // Añadimos tres power-ups: velocidad, aumento de radio y escudo
-        powerUps = new Array<PowerUp>();
-        powerUps.add(new PowerUp(PowerUp.PowerUpType.SPEED, 100, 100));
-        powerUps.add(new PowerUp(PowerUp.PowerUpType.BOMB_RADIUS, 150, 150));
-        powerUps.add(new PowerUp(PowerUp.PowerUpType.SHIELD, 200, 100));
+        // Inicializar los enemigos en las otras tres esquinas
+        enemies = new Array<>();
+        // Esquina inferior derecha: (fila 1, columna 23)
+        enemies.add(new Enemy(23 * GameMap.TILE_SIZE, 1 * GameMap.TILE_SIZE));
+        // Esquina superior izquierda: (fila 13, columna 1)
+        enemies.add(new Enemy(1 * GameMap.TILE_SIZE, 13 * GameMap.TILE_SIZE));
+        // Esquina superior derecha: (fila 13, columna 23)
+        enemies.add(new Enemy(23 * GameMap.TILE_SIZE, 13 * GameMap.TILE_SIZE));
+
+        powerUps = new Array<>();
+        bombs = new Array<>();
+
+        // Cargamos imágenes para botones (estos assets deben estar en tu carpeta de assets)
+        btnUp = new Texture("btn_up.png");
+        btnDown = new Texture("btn_down.png");
+        btnLeft = new Texture("btn_left.png");
+        btnRight = new Texture("btn_right.png");
+        btnBomb = new Texture("btn_bomb.png");
+
+        int btnSize = 50;
+        int margin = 10;
+        // Botones de desplazamiento en forma de D-Pad en la esquina inferior izquierda
+        rectBtnLeft  = new Rectangle(margin, margin + btnSize, btnSize, btnSize);
+        rectBtnDown  = new Rectangle(margin + btnSize, margin, btnSize, btnSize);
+        rectBtnUp    = new Rectangle(margin + btnSize, margin + btnSize * 2, btnSize, btnSize);
+        rectBtnRight = new Rectangle(margin + btnSize * 2, margin + btnSize, btnSize, btnSize);
+        // Botón de bomba en la esquina inferior derecha
+        rectBtnBomb  = new Rectangle(800 - margin - btnSize, margin, btnSize, btnSize);
     }
 
     @Override
@@ -55,17 +84,47 @@ public class GameScreen implements Screen {
         for (PowerUp powerUp : powerUps) {
             powerUp.render(game.batch);
         }
+        for (Bomb bomb : bombs) {
+            bomb.render(game.batch);
+        }
+        // Dibujamos los botones de control
+        game.batch.draw(btnLeft,  rectBtnLeft.x,  rectBtnLeft.y,  rectBtnLeft.width,  rectBtnLeft.height);
+        game.batch.draw(btnDown,  rectBtnDown.x,  rectBtnDown.y,  rectBtnDown.width,  rectBtnDown.height);
+        game.batch.draw(btnUp,    rectBtnUp.x,    rectBtnUp.y,    rectBtnUp.width,    rectBtnUp.height);
+        game.batch.draw(btnRight, rectBtnRight.x, rectBtnRight.y, rectBtnRight.width, rectBtnRight.height);
+        game.batch.draw(btnBomb,  rectBtnBomb.x,  rectBtnBomb.y,  rectBtnBomb.width,  rectBtnBomb.height);
         game.batch.end();
     }
 
     private void update(float delta) {
-        handleInput(delta);
-
+        // Actualizamos jugador.
         player.update(delta);
+
+        // Actualizamos enemigos y recogemos bombas lanzadas por ellos.
         for (Enemy enemy : enemies) {
-            enemy.update(delta, gameMap);
+            enemy.update(delta, gameMap, player);
+            Bomb enemyBomb = enemy.getBomb();
+            if (enemyBomb != null) {
+                bombs.add(enemyBomb);
+            }
         }
-        // Comprobación simple de colisión entre jugador y power-ups (asumiendo 32x32 píxeles)
+
+        // Actualizamos bombas.
+        for (int i = bombs.size - 1; i >= 0; i--) {
+            Bomb b = bombs.get(i);
+            b.update(delta);
+            // Si el fuse terminó y aun no ha explotado, se dispara la explosión.
+            if (!b.hasExploded() && b.getFuseTime() <= 0f) {
+                b.triggerExplosion(gameMap, powerUps);
+                checkExplosionCollision(b);
+            }
+            if (b.isFinished()) {
+                bombs.removeIndex(i);
+                b.dispose();
+            }
+        }
+
+        // Comprobamos colisiones entre jugador y power-ups.
         for (int i = powerUps.size - 1; i >= 0; i--) {
             PowerUp p = powerUps.get(i);
             if (checkCollision(player, p)) {
@@ -73,21 +132,69 @@ public class GameScreen implements Screen {
                 powerUps.removeIndex(i);
             }
         }
+
+        // Procesamos la entrada táctil (para mover al jugador y lanzar bomba manualmente).
+        if (Gdx.input.isTouched()) {
+            Vector3 touchPos = new Vector3(Gdx.input.getX(), Gdx.input.getY(), 0);
+            camera.unproject(touchPos);
+            if (rectBtnUp.contains(touchPos.x, touchPos.y)) {
+                player.move(Direction.UP, delta, gameMap);
+            } else if (rectBtnDown.contains(touchPos.x, touchPos.y)) {
+                player.move(Direction.DOWN, delta, gameMap);
+            } else if (rectBtnLeft.contains(touchPos.x, touchPos.y)) {
+                player.move(Direction.LEFT, delta, gameMap);
+            } else if (rectBtnRight.contains(touchPos.x, touchPos.y)) {
+                player.move(Direction.RIGHT, delta, gameMap);
+            } else if (rectBtnBomb.contains(touchPos.x, touchPos.y)) {
+                Bomb newBomb = player.placeBomb();
+                if (newBomb != null) {
+                    bombs.add(newBomb);
+                }
+            }
+        }
+
+        // Verifica si las explosiones han impactado al jugador y a los enemigos.
+        // Se comprende de forma simple: se toma la celda de la bomba y se considera el radio para detonación en línea recta.
     }
 
-    private void handleInput(float delta) {
-        if (Gdx.input.isKeyPressed(Input.Keys.UP)) {
-            player.move(Direction.UP, delta);
-        } else if (Gdx.input.isKeyPressed(Input.Keys.DOWN)) {
-            player.move(Direction.DOWN, delta);
-        } else if (Gdx.input.isKeyPressed(Input.Keys.LEFT)) {
-            player.move(Direction.LEFT, delta);
-        } else if (Gdx.input.isKeyPressed(Input.Keys.RIGHT)) {
-            player.move(Direction.RIGHT, delta);
+    /**
+     * Comprueba si la explosión de la bomba 'b' alcanza al jugador o a algún enemigo.
+     */
+    private void checkExplosionCollision(Bomb b) {
+        int bx = (int)(b.getX() / GameMap.TILE_SIZE);
+        int by = (int)(b.getY() / GameMap.TILE_SIZE);
+
+        // Comprobamos al jugador.
+        int px = (int)(player.getX() / GameMap.TILE_SIZE);
+        int py = (int)(player.getY() / GameMap.TILE_SIZE);
+        if ((px == bx && Math.abs(py - by) <= b.getRadius()) ||
+            (py == by && Math.abs(px - bx) <= b.getRadius())) {
+            player.kill();
+            System.out.println("El jugador ha sido muerto por una explosión de bomba.");
+        }
+
+        // Comprobamos cada enemigo.
+        for (int i = enemies.size - 1; i >= 0; i--) {
+            Enemy enemy = enemies.get(i);
+            int ex = (int)(enemy.getX() / GameMap.TILE_SIZE);
+            int ey = (int)(enemy.getY() / GameMap.TILE_SIZE);
+            if ((ex == bx && Math.abs(ey - by) <= b.getRadius()) ||
+                (ey == by && Math.abs(ex - bx) <= b.getRadius())) {
+                enemy.kill();
+            }
+        }
+        // Eliminamos los enemigos muertos.
+        for (int i = enemies.size - 1; i >= 0; i--) {
+            if (!enemies.get(i).isAlive()) {
+                enemies.removeIndex(i);
+            }
         }
     }
 
+
+
     private boolean checkCollision(Player player, PowerUp p) {
+        // Utilizamos las dimensiones originales (32x32) para la comprobación; ajusta si es necesario.
         Rectangle playerRect = new Rectangle(player.getX(), player.getY(), 32, 32);
         Rectangle powerRect = new Rectangle(p.getX(), p.getY(), 32, 32);
         return playerRect.overlaps(powerRect);
@@ -95,16 +202,15 @@ public class GameScreen implements Screen {
 
     private void activatePowerUp(PowerUp p) {
         switch(p.getType()){
-            case SPEED:
-                player.increaseSpeed();
-                break;
-            case BOMB_RADIUS:
-                player.increaseBombRadius();
-                break;
-            case SHIELD:
-                player.activateShield();
-                break;
+            case SPEED: player.increaseSpeed(); break;
+            case BOMB_RADIUS: player.increaseBombRadius(); break;
+            case SHIELD: player.activateShield(); break;
         }
+    }
+
+    private void spawnPowerUp(float x, float y) {
+        PowerUp.PowerUpType type = PowerUp.PowerUpType.values()[com.badlogic.gdx.math.MathUtils.random(PowerUp.PowerUpType.values().length - 1)];
+        powerUps.add(new PowerUp(type, x, y));
     }
 
     @Override public void resize(int width, int height) {}
@@ -117,9 +223,13 @@ public class GameScreen implements Screen {
     public void dispose() {
         gameMap.dispose();
         player.dispose();
-        for (Enemy enemy : enemies)
-            enemy.dispose();
-        for (PowerUp powerUp : powerUps)
-            powerUp.dispose();
+        for (Enemy enemy : enemies) enemy.dispose();
+        for (PowerUp powerUp : powerUps) powerUp.dispose();
+        for (Bomb bomb : bombs) bomb.dispose();
+        btnUp.dispose();
+        btnDown.dispose();
+        btnLeft.dispose();
+        btnRight.dispose();
+        btnBomb.dispose();
     }
 }

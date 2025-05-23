@@ -72,11 +72,11 @@ public class GameMap {
     }
 
     private void loadTextures() {
-        // Piso seguro: blanco.
+        // Piso seguro: blanco
         floorSafeTexture = createColorTexture(TILE_SIZE, TILE_SIZE, Color.WHITE);
-        // Muro destructible (valor 2): marrón fuerte (por ejemplo, tono marrón oscuro)
+        // Muro destructible (valor 2)
         destructibleWallTexture = createColorTexture(TILE_SIZE, TILE_SIZE, new Color(0.55f, 0.27f, 0.07f, 1));
-        // Muros fijos (valor 1): gris oscuro.
+        // Muros fijos (valor 1)
         wallTexture = createColorTexture(TILE_SIZE, TILE_SIZE, Color.DARK_GRAY);
     }
 

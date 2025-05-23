@@ -142,13 +142,14 @@ public class Player {
 
     public void kill() {
         if (shield) {
-            shield = false;
-            System.out.println("Escudo absorbió el daño.");
+            shield = false; // Solo protege una vez
+            System.out.println("El escudo absorbió la explosión, pero se ha destruido.");
         } else {
             alive = false;
             System.out.println("El jugador ha sido eliminado.");
         }
     }
+
 
     public boolean isAlive() { return alive; }
 

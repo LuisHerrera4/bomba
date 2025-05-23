@@ -125,7 +125,8 @@ public class GameScreen implements Screen {
         Array<Enemy> enemiesCopy = new Array<>(enemies); // evitar iteración anidada
 
         for (Enemy enemy : enemiesCopy) {
-            enemy.update(delta, gameMap, player, enemies); // sigue usando el array original como referencia
+            enemy.update(delta, gameMap, player, enemies);
+            // sigue usando el array original como referencia
             Bomb enemyBomb = enemy.getBomb();
             if (enemyBomb != null) {
                 bombs.add(enemyBomb);
@@ -137,7 +138,7 @@ public class GameScreen implements Screen {
         for (int i = bombs.size - 1; i >= 0; i--) {
             Bomb b = bombs.get(i);
             b.update(delta);
-            // Si el fuse terminó y aun no ha explotado, se dispara la explosión.
+            // Si el fuse termino y aun no ha explotado, se dispara la explosión.
             if (!b.hasExploded() && b.getFuseTime() <= 0f) {
                 b.triggerExplosion(gameMap, powerUps);
                 checkExplosionCollision(b);
@@ -157,7 +158,7 @@ public class GameScreen implements Screen {
             }
         }
 
-        // Procesamos la entrada táctil (para mover al jugador y lanzar bomba manualmente).
+        // para mover al jugador y lanzar bomba manualmente
         if (Gdx.input.isTouched()) {
             Vector3 touchPos = new Vector3(Gdx.input.getX(), Gdx.input.getY(), 0);
             camera.unproject(touchPos);
@@ -177,26 +178,20 @@ public class GameScreen implements Screen {
             }
         }
 
-        // Verifica si las explosiones han impactado al jugador y a los enemigos.
-        // Se comprende de forma simple: se toma la celda de la bomba y se considera el radio para detonación en línea recta.
     }
 
-    /**
-     * Comprueba si la explosión de la bomba 'b' alcanza al jugador o a algún enemigo.
-     */
+
     private void checkExplosionCollision(Bomb b) {
         int bx = (int)(b.getX() / GameMap.TILE_SIZE);
         int by = (int)(b.getY() / GameMap.TILE_SIZE);
 
-        // Verifica jugador si NO es su propia bomba
+        // Verifica si el jugador ha sido alcanzado por la explosión
         int px = (int)(player.getX() / GameMap.TILE_SIZE);
         int py = (int)(player.getY() / GameMap.TILE_SIZE);
-        if (b.getOwnerType() != Bomb.OwnerType.PLAYER) {
-            if ((px == bx && Math.abs(py - by) <= b.getRadius()) ||
-                (py == by && Math.abs(px - bx) <= b.getRadius())) {
-                player.kill();
-                System.out.println("El jugador ha sido alcanzado por una bomba.");
-            }
+        if ((px == bx && Math.abs(py - by) <= b.getRadius()) ||
+            (py == by && Math.abs(px - bx) <= b.getRadius())) {
+            player.kill();
+            System.out.println("El jugador ha sido alcanzado por una bomba.");
         }
 
         // Verifica cada enemigo
@@ -205,8 +200,9 @@ public class GameScreen implements Screen {
             int ex = (int)(enemy.getX() / GameMap.TILE_SIZE);
             int ey = (int)(enemy.getY() / GameMap.TILE_SIZE);
 
+            // Si la bomba pertenece a este enemigo, no debe afectarlo
             if (b.getOwnerType() == Bomb.OwnerType.ENEMY && b.getOwnerId() == enemy.getId()) {
-                continue; // No se mata a sí mismo
+                continue; // Ignora esta bomba para el enemigo dueño
             }
 
             if ((ex == bx && Math.abs(ey - by) <= b.getRadius()) ||
@@ -222,6 +218,7 @@ public class GameScreen implements Screen {
             }
         }
     }
+
 
 
 

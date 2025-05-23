@@ -35,9 +35,8 @@ public class PowerUp {
         }
     }
 
-    /**
-     * Renderiza el power-up ajustándolo al tamaño de una celda (`GameMap.TILE_SIZE`).
-     */
+    //Renderiza el power-up ajustándolo al tamaño de una celda (`GameMap.TILE_SIZE`).
+
     public void render(SpriteBatch batch) {
         batch.draw(texture, x, y, GameMap.TILE_SIZE, GameMap.TILE_SIZE);
     }

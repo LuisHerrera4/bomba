@@ -89,10 +89,10 @@ public class Enemy {
 
     public void update(float delta, GameMap map, Player player, Array<Enemy> allEnemies) {
         moveTimer += delta;
-        if (moveTimer > changeDirectionInterval) chooseNewDirection();
         float d = speed * delta;
-        float newX = x, newY = y;
 
+        // Intentar avanzar en la dirección actual
+        float newX = x, newY = y;
         switch (currentDirection) {
             case 0: newY += d; break;
             case 1: newY -= d; break;
@@ -100,54 +100,27 @@ public class Enemy {
             case 3: newX += d; break;
         }
 
-        boolean canMove = canMoveTo(newX, newY, map);
-
-        if (canMove) {
+        if (canMoveTo(newX, newY, map)) {
             x = newX;
             y = newY;
         } else {
-            chooseNewDirection();
-            // Si está atascado, intentar colocar bomba si es seguro
-            if (bombCooldown <= 0f && isSafeToPlaceBomb(map)) {
+            // Si no puede moverse, coloca una bomba para abrir camino
+            if (bombCooldown <= 0f) {
                 enemyBomb = placeBomb();
                 bombCooldown = bombCooldownTime;
             }
-        }
-
-// Recoger power-ups
-        for (int i = powerUps.size - 1; i >= 0; i--) {
-            PowerUp p = powerUps.get(i);
-            if (checkCollisionWith(p)) {
-                activatePowerUp(p);
-                powerUps.removeIndex(i);
-            }
-        }
-
-// Buscar objetivo más cercano
-        float targetX = player.getX();
-        float targetY = player.getY();
-        for (Enemy other : allEnemies) {
-            if (other != this && other.isAlive()) {
-                float dEn = Vector2.dst(x, y, other.getX(), other.getY());
-                if (dEn < 5 * GameMap.TILE_SIZE) {
-                    targetX = other.getX();
-                    targetY = other.getY();
-                    break;
-                }
+            // Esperar a que la explosión ocurra antes de cambiar de dirección
+            if (map.getCell((int) (y / GameMap.TILE_SIZE), (int) (x / GameMap.TILE_SIZE)) == 0) {
+                chooseNewDirection();
             }
         }
 
         bombCooldown -= delta;
-        float dx = targetX - x;
-        float dy = targetY - y;
-        float distance = (float) Math.sqrt(dx * dx + dy * dy);
-
-        if (distance < 5 * GameMap.TILE_SIZE && bombCooldown <= 0f && isSafeToPlaceBomb(map)) {
-            enemyBomb = placeBomb();
-            bombCooldown = bombCooldownTime;
-        }
-
     }
+
+
+
+
 
     public Bomb placeBomb() {
         int bombCol = Math.round(x / GameMap.TILE_SIZE);
@@ -192,9 +165,6 @@ public class Enemy {
         int startRow = (int) (newY / GameMap.TILE_SIZE);
         int endRow = (int) ((newY + HEIGHT - 1) / GameMap.TILE_SIZE);
 
-        pgsql
-            Copiar
-        Editar
         for (int row = startRow; row <= endRow; row++) {
             for (int col = startCol; col <= endCol; col++) {
                 int cell = map.getCell(row, col);
@@ -220,13 +190,40 @@ public class Enemy {
     }
 
     private boolean isSafeToPlaceBomb(GameMap map) {
+        int col = (int) (x / GameMap.TILE_SIZE);
+        int row = (int) (y / GameMap.TILE_SIZE);
+
+        int escapeRoutes = 0;
+
+        if (map.isCellPassable(row + 1, col)) escapeRoutes++;
+        if (map.isCellPassable(row - 1, col)) escapeRoutes++;
+        if (map.isCellPassable(row, col + 1)) escapeRoutes++;
+        if (map.isCellPassable(row, col - 1)) escapeRoutes++;
+
+        return escapeRoutes >= 2;  // Necesita al menos dos direcciones para no quedar atrapado
+    }
+
+    private boolean isSafeToMove(GameMap map) {
         int col = (int)(x / GameMap.TILE_SIZE);
         int row = (int)(y / GameMap.TILE_SIZE);
-        int free = 0;
-        if (map.getCell(row + 1, col) == 0) free++;
-        if (map.getCell(row - 1, col) == 0) free++;
-        if (map.getCell(row, col + 1) == 0) free++;
-        if (map.getCell(row, col - 1) == 0) free++;
-        return free >= 1;
+
+        return map.isCellPassable(row + 1, col) ||
+            map.isCellPassable(row - 1, col) ||
+            map.isCellPassable(row, col + 1) ||
+            map.isCellPassable(row, col - 1);
     }
+
+    private void escapeFromBomb(GameMap map) {
+        if (map.isCellPassable((int)(y / GameMap.TILE_SIZE) + 1, (int)(x / GameMap.TILE_SIZE))) {
+            currentDirection = 0; // Moverse arriba
+        } else if (map.isCellPassable((int)(y / GameMap.TILE_SIZE) - 1, (int)(x / GameMap.TILE_SIZE))) {
+            currentDirection = 1; // Moverse abajo
+        } else if (map.isCellPassable((int)(y / GameMap.TILE_SIZE), (int)(x / GameMap.TILE_SIZE) - 1)) {
+            currentDirection = 2; // Moverse izquierda
+        } else if (map.isCellPassable((int)(y / GameMap.TILE_SIZE), (int)(x / GameMap.TILE_SIZE) + 1)) {
+            currentDirection = 3; // Moverse derecha
+        }
+    }
+
+
 }

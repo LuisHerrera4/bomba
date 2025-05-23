@@ -1,3 +1,4 @@
+// Player.java
 package com.example.bomba;
 
 import com.badlogic.gdx.graphics.Texture;
@@ -7,37 +8,25 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 
 public class Player {
     private float x, y;
-    private float speed; // píxeles por segundo
+    private float speed;
     private int bombRadius;
     private boolean shield;
+    private boolean alive = true;
 
-    // Cooldown de bomba
     private float bombCooldown;
     private float bombCooldownTime;
 
-    private boolean alive = true;
-
-    public boolean isAlive() {
-        return alive;
-    }
-
-    public void kill() {
-        alive = false;
-        System.out.println("El jugador ha sido eliminado.");
-    }
-
-    // Animaciones direccionales
     private Animation<TextureRegion> animUp, animDown, animRight, animLeft;
     private Animation<TextureRegion> currentAnimation;
     private float stateTime;
-    private boolean moving;  // se activa cuando el jugador se mueve
+    private boolean moving;
     private Direction currentDirection;
 
-    // Tamaño del sprite (asumido 32×32)
     private static final int WIDTH = 32;
     private static final int HEIGHT = 32;
-    // Margen de colisión (se reduce el “hit-box” efectivo)
-    private static final int COLLISION_MARGIN = 6; // Puedes ajustar este valor
+    private static final int COLLISION_MARGIN = 6;
+
+    private Texture shieldOverlay;
 
     public Player(float x, float y) {
         this.x = x;
@@ -45,17 +34,16 @@ public class Player {
         this.speed = 100f;
         this.bombRadius = 1;
         this.shield = false;
+        this.bombCooldown = 0f;
+        this.bombCooldownTime = 2.0f;
+        this.shieldOverlay = new Texture("power_shield.png");
+
         loadAnimations();
-        stateTime = 0f;
-        moving = false;
-        bombCooldown = 0f;
-        bombCooldownTime = 2.0f; // 2 segundos de cooldown
-        currentDirection = Direction.DOWN; // Por defecto, de cara
+        currentDirection = Direction.DOWN;
         currentAnimation = animDown;
     }
 
     private void loadAnimations() {
-        // Se asume que las imágenes están organizadas en carpetas de movimiento
         Texture up1 = new Texture("Movimiento/Atras/player_U1.png");
         Texture up2 = new Texture("Movimiento/Atras/player_U2.png");
         Texture up3 = new Texture("Movimiento/Atras/player_U3.png");
@@ -69,39 +57,25 @@ public class Player {
         Texture left2 = new Texture("Movimiento/Izquierda/player_L2.png");
         Texture left3 = new Texture("Movimiento/Izquierda/player_L3.png");
 
-        TextureRegion[] framesUp = new TextureRegion[] {
-            new TextureRegion(up1), new TextureRegion(up2), new TextureRegion(up3)
-        };
-        TextureRegion[] framesDown = new TextureRegion[] {
-            new TextureRegion(down1), new TextureRegion(down2), new TextureRegion(down3)
-        };
-        TextureRegion[] framesRight = new TextureRegion[] {
-            new TextureRegion(right1), new TextureRegion(right2), new TextureRegion(right3)
-        };
-        TextureRegion[] framesLeft = new TextureRegion[] {
-            new TextureRegion(left1), new TextureRegion(left2), new TextureRegion(left3)
-        };
-
-        animUp = new Animation<TextureRegion>(0.15f, framesUp);
-        animDown = new Animation<TextureRegion>(0.15f, framesDown);
-        animRight = new Animation<TextureRegion>(0.15f, framesRight);
-        animLeft = new Animation<TextureRegion>(0.15f, framesLeft);
+        animUp = new Animation<>(0.15f, new TextureRegion(up1), new TextureRegion(up2), new TextureRegion(up3));
+        animDown = new Animation<>(0.15f, new TextureRegion(down1), new TextureRegion(down2), new TextureRegion(down3));
+        animRight = new Animation<>(0.15f, new TextureRegion(right1), new TextureRegion(right2), new TextureRegion(right3));
+        animLeft = new Animation<>(0.15f, new TextureRegion(left1), new TextureRegion(left2), new TextureRegion(left3));
     }
 
-    /**
-     * Intenta mover al jugador en la dirección especificada y actualiza la animación actual.
-     */
     public void move(Direction direction, float delta, GameMap gameMap) {
         float newX = x;
         float newY = y;
         float d = speed * delta;
         currentDirection = direction;
-        switch(direction) {
+
+        switch (direction) {
             case UP: newY += d; break;
             case DOWN: newY -= d; break;
             case LEFT: newX -= d; break;
             case RIGHT: newX += d; break;
         }
+
         if (canMoveTo(newX, newY, gameMap)) {
             x = newX;
             y = newY;
@@ -109,8 +83,8 @@ public class Player {
         } else {
             moving = false;
         }
-        // Actualizamos la animación actual según la dirección
-        switch(direction) {
+
+        switch (direction) {
             case UP: currentAnimation = animUp; break;
             case DOWN: currentAnimation = animDown; break;
             case LEFT: currentAnimation = animLeft; break;
@@ -118,12 +92,7 @@ public class Player {
         }
     }
 
-    /**
-     * Verifica si el jugador puede moverse a la posición (newX, newY),
-     * utilizando un área de colisión reducida (más fluida).
-     */
     private boolean canMoveTo(float newX, float newY, GameMap gameMap) {
-        // Se reduce el área de colisión en ambos ejes
         float effectiveX = newX + COLLISION_MARGIN / 2f;
         float effectiveY = newY + COLLISION_MARGIN / 2f;
         int effectiveWidth = WIDTH - COLLISION_MARGIN;
@@ -136,16 +105,13 @@ public class Player {
 
         for (int row = startRow; row <= endRow; row++) {
             for (int col = startCol; col <= endCol; col++) {
-                if (!gameMap.isCellPassable(row, col))
-                    return false;
+                if (!gameMap.isCellPassable(row, col)) return false;
             }
         }
+
         return true;
     }
 
-    /**
-     * Actualiza la animación (solo avanza si se movió) y descuenta el cooldown de la bomba.
-     */
     public void update(float delta) {
         if (moving) {
             stateTime += delta;
@@ -163,40 +129,49 @@ public class Player {
     public void render(SpriteBatch batch) {
         TextureRegion frame = currentAnimation.getKeyFrame(stateTime, true);
         batch.draw(frame, x, y);
+        if (shield) {
+            batch.draw(shieldOverlay, x, y, WIDTH, HEIGHT);
+        }
     }
 
-    // Métodos para los power-ups y acceso a la posición.
     public void increaseSpeed() { speed += 20; }
     public void increaseBombRadius() { bombRadius++; }
     public void activateShield() { shield = true; }
-    public float getX() { return x; }
-    public float getY() { return y; }
+    public void deactivateShield() { shield = false; }
+    public boolean hasShield() { return shield; }
 
-    public void dispose() {
-        // Liberamos las texturas de la animación.
-        animUp.getKeyFrame(0).getTexture().dispose();
-        animDown.getKeyFrame(0).getTexture().dispose();
-        animRight.getKeyFrame(0).getTexture().dispose();
-        animLeft.getKeyFrame(0).getTexture().dispose();
+    public void kill() {
+        if (shield) {
+            shield = false;
+            System.out.println("Escudo absorbió el daño.");
+        } else {
+            alive = false;
+            System.out.println("El jugador ha sido eliminado.");
+        }
     }
 
-    /**
-     * Coloca una bomba en la celda actual del jugador, reiniciando el cooldown.
-     */
+    public boolean isAlive() { return alive; }
+
     public Bomb placeBomb() {
         if (bombCooldown <= 0f) {
-            // Se redondea la posición a la celda más cercana para que la bomba aparezca donde está el jugador
             int bombCol = Math.round(x / GameMap.TILE_SIZE);
             int bombRow = Math.round(y / GameMap.TILE_SIZE);
             float bombX = bombCol * GameMap.TILE_SIZE;
             float bombY = bombRow * GameMap.TILE_SIZE;
             bombCooldown = bombCooldownTime;
-            System.out.println("Bomba colocada en la celda (" + bombCol + ", " + bombRow + ")");
-            return new Bomb(bombX, bombY, bombRadius);
-        } else {
-            System.out.println("Bomba en cooldown. Tiempo restante: " + bombCooldown);
-            return null;
+            return new Bomb(bombX, bombY, bombRadius, Bomb.OwnerType.PLAYER, 0);
         }
+        return null;
     }
 
+    public float getX() { return x; }
+    public float getY() { return y; }
+
+    public void dispose() {
+        animUp.getKeyFrame(0).getTexture().dispose();
+        animDown.getKeyFrame(0).getTexture().dispose();
+        animRight.getKeyFrame(0).getTexture().dispose();
+        animLeft.getKeyFrame(0).getTexture().dispose();
+        shieldOverlay.dispose();
+    }
 }

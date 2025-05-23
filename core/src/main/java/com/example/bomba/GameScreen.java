@@ -65,9 +65,31 @@ public class GameScreen implements Screen {
         rectBtnBomb  = new Rectangle(800 - margin - btnSize, margin, btnSize, btnSize);
     }
 
+
     @Override
     public void render(float delta) {
         update(delta);
+
+        // Mostrar pantalla de derrota si el jugador está muerto
+        if (!player.isAlive()) {
+            game.setScreen(new LoseScreen(game));
+            dispose();
+            return;
+        }
+
+        // Mostrar pantalla de victoria si todos los enemigos están muertos
+        boolean allEnemiesDead = true;
+        for (Enemy e : enemies) {
+            if (e.isAlive()) {
+                allEnemiesDead = false;
+                break;
+            }
+        }
+        if (allEnemiesDead) {
+            game.setScreen(new WinScreen(game));
+            dispose();
+            return;
+        }
 
         Gdx.gl.glClearColor(0, 0, 0, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
@@ -87,7 +109,6 @@ public class GameScreen implements Screen {
         for (Bomb bomb : bombs) {
             bomb.render(game.batch);
         }
-        // Dibujamos los botones de control
         game.batch.draw(btnLeft,  rectBtnLeft.x,  rectBtnLeft.y,  rectBtnLeft.width,  rectBtnLeft.height);
         game.batch.draw(btnDown,  rectBtnDown.x,  rectBtnDown.y,  rectBtnDown.width,  rectBtnDown.height);
         game.batch.draw(btnUp,    rectBtnUp.x,    rectBtnUp.y,    rectBtnUp.width,    rectBtnUp.height);
@@ -96,18 +117,21 @@ public class GameScreen implements Screen {
         game.batch.end();
     }
 
+
     private void update(float delta) {
         // Actualizamos jugador.
         player.update(delta);
 
-        // Actualizamos enemigos y recogemos bombas lanzadas por ellos.
-        for (Enemy enemy : enemies) {
-            enemy.update(delta, gameMap, player);
+        Array<Enemy> enemiesCopy = new Array<>(enemies); // evitar iteración anidada
+
+        for (Enemy enemy : enemiesCopy) {
+            enemy.update(delta, gameMap, player, enemies); // sigue usando el array original como referencia
             Bomb enemyBomb = enemy.getBomb();
             if (enemyBomb != null) {
                 bombs.add(enemyBomb);
             }
         }
+
 
         // Actualizamos bombas.
         for (int i = bombs.size - 1; i >= 0; i--) {
@@ -164,26 +188,34 @@ public class GameScreen implements Screen {
         int bx = (int)(b.getX() / GameMap.TILE_SIZE);
         int by = (int)(b.getY() / GameMap.TILE_SIZE);
 
-        // Comprobamos al jugador.
+        // Verifica jugador si NO es su propia bomba
         int px = (int)(player.getX() / GameMap.TILE_SIZE);
         int py = (int)(player.getY() / GameMap.TILE_SIZE);
-        if ((px == bx && Math.abs(py - by) <= b.getRadius()) ||
-            (py == by && Math.abs(px - bx) <= b.getRadius())) {
-            player.kill();
-            System.out.println("El jugador ha sido muerto por una explosión de bomba.");
+        if (b.getOwnerType() != Bomb.OwnerType.PLAYER) {
+            if ((px == bx && Math.abs(py - by) <= b.getRadius()) ||
+                (py == by && Math.abs(px - bx) <= b.getRadius())) {
+                player.kill();
+                System.out.println("El jugador ha sido alcanzado por una bomba.");
+            }
         }
 
-        // Comprobamos cada enemigo.
+        // Verifica cada enemigo
         for (int i = enemies.size - 1; i >= 0; i--) {
             Enemy enemy = enemies.get(i);
             int ex = (int)(enemy.getX() / GameMap.TILE_SIZE);
             int ey = (int)(enemy.getY() / GameMap.TILE_SIZE);
+
+            if (b.getOwnerType() == Bomb.OwnerType.ENEMY && b.getOwnerId() == enemy.getId()) {
+                continue; // No se mata a sí mismo
+            }
+
             if ((ex == bx && Math.abs(ey - by) <= b.getRadius()) ||
                 (ey == by && Math.abs(ex - bx) <= b.getRadius())) {
                 enemy.kill();
             }
         }
-        // Eliminamos los enemigos muertos.
+
+        // Elimina enemigos muertos
         for (int i = enemies.size - 1; i >= 0; i--) {
             if (!enemies.get(i).isAlive()) {
                 enemies.removeIndex(i);

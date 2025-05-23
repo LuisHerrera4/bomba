@@ -1,3 +1,4 @@
+// Enemy.java
 package com.example.bomba;
 
 import com.badlogic.gdx.graphics.Texture;
@@ -5,11 +6,16 @@ import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Vector2;
+import com.badlogic.gdx.utils.Array;
 
 public class Enemy {
+    private static int nextId = 1;
+    private int id;
+
     private float x, y;
     private float speed;
-    private int currentDirection; // 0: UP, 1: DOWN, 2: LEFT, 3: RIGHT
+    private int currentDirection;
     private Animation<TextureRegion> animUp, animDown, animRight, animLeft;
     private Animation<TextureRegion> currentAnimation;
     private float stateTime;
@@ -18,28 +24,25 @@ public class Enemy {
     private static final int WIDTH = 32;
     private static final int HEIGHT = 32;
 
-    // Bomb throwing fields
     private float bombCooldown;
     private float bombCooldownTime;
 
     private boolean alive = true;
-
-    // Campo para almacenar la bomba lanzada en esta actualización (si la hay)
     private Bomb enemyBomb = null;
 
     public Enemy(float x, float y) {
+        this.id = nextId++;
         this.x = x;
         this.y = y;
         this.speed = 80f;
         loadAnimations();
         stateTime = 0f;
         chooseNewDirection();
-        bombCooldownTime = 3.0f; // El enemigo puede lanzar una bomba cada 3 segundos
+        bombCooldownTime = 3.0f;
         bombCooldown = 0f;
     }
 
     private void loadAnimations() {
-        // Usamos las mismas imágenes que el jugador.
         Texture up1 = new Texture("Movimiento/Atras/player_U1.png");
         Texture up2 = new Texture("Movimiento/Atras/player_U2.png");
         Texture up3 = new Texture("Movimiento/Atras/player_U3.png");
@@ -66,10 +69,10 @@ public class Enemy {
             new TextureRegion(left1), new TextureRegion(left2), new TextureRegion(left3)
         };
 
-        animUp = new Animation<TextureRegion>(0.15f, framesUp);
-        animDown = new Animation<TextureRegion>(0.15f, framesDown);
-        animRight = new Animation<TextureRegion>(0.15f, framesRight);
-        animLeft = new Animation<TextureRegion>(0.15f, framesLeft);
+        animUp = new Animation<>(0.15f, framesUp);
+        animDown = new Animation<>(0.15f, framesDown);
+        animRight = new Animation<>(0.15f, framesRight);
+        animLeft = new Animation<>(0.15f, framesLeft);
     }
 
     private void chooseNewDirection() {
@@ -84,18 +87,9 @@ public class Enemy {
         }
     }
 
-    /**
-     * Se actualiza el enemigo, se mueve según su dirección y, si el jugador está cercano (<5 tiles)
-     * y se ha cumplido el cooldown, lanza una bomba.
-     * @param delta Tiempo delta.
-     * @param map Mapa para colisiones.
-     * @param player Referencia al jugador.
-     */
-    public void update(float delta, GameMap map, Player player) {
+    public void update(float delta, GameMap map, Player player, Array<Enemy> allEnemies) {
         moveTimer += delta;
-        if (moveTimer > changeDirectionInterval) {
-            chooseNewDirection();
-        }
+        if (moveTimer > changeDirectionInterval) chooseNewDirection();
 
         float d = speed * delta;
         float newX = x, newY = y;
@@ -107,7 +101,6 @@ public class Enemy {
             case 3: newX += d; break;
         }
 
-        // Verificación de colisión MEJORADA: el enemigo solo puede moverse si NO hay muros indestructibles.
         int startCol = (int) (newX / GameMap.TILE_SIZE);
         int endCol = (int) ((newX + WIDTH - 1) / GameMap.TILE_SIZE);
         int startRow = (int) (newY / GameMap.TILE_SIZE);
@@ -117,7 +110,7 @@ public class Enemy {
         for (int row = startRow; row <= endRow; row++) {
             for (int col = startCol; col <= endCol; col++) {
                 int cellValue = map.getCell(row, col);
-                if (cellValue == 1) {  // Si hay una pared indestructible, bloquea el paso.
+                if (cellValue != 0) {
                     canMove = false;
                     break;
                 }
@@ -129,15 +122,29 @@ public class Enemy {
             x = newX;
             y = newY;
         } else {
-            chooseNewDirection(); // Si choca con un muro indestructible, elige nueva dirección.
+            chooseNewDirection();
         }
 
         stateTime += delta;
 
-        // Lógica de bomb throwing: si el jugador está cerca y se cumple el cooldown, lanza bomba.
+        // Buscar objetivo más cercano (jugador o enemigo diferente)
+        float targetX = player.getX();
+        float targetY = player.getY();
+
+        for (Enemy other : allEnemies) {
+            if (other != this && other.isAlive()) {
+                float dEn = Vector2.dst(x, y, other.getX(), other.getY());
+                if (dEn < 5 * GameMap.TILE_SIZE) {
+                    targetX = other.getX();
+                    targetY = other.getY();
+                    break;
+                }
+            }
+        }
+
         bombCooldown -= delta;
-        float dx = player.getX() - x;
-        float dy = player.getY() - y;
+        float dx = targetX - x;
+        float dy = targetY - y;
         float distance = (float) Math.sqrt(dx * dx + dy * dy);
         if (distance < 5 * GameMap.TILE_SIZE && bombCooldown <= 0f) {
             enemyBomb = placeBomb();
@@ -145,25 +152,24 @@ public class Enemy {
         }
     }
 
-
-
-
-
-    /**
-     * Permite al enemigo colocar una bomba en su celda actual.
-     */
     public Bomb placeBomb() {
-        return new Bomb(x, y, 1);  // Radio 1, se puede ajustar
+        int bombCol = Math.round(x / GameMap.TILE_SIZE);
+        int bombRow = Math.round(y / GameMap.TILE_SIZE);
+        float bombX = bombCol * GameMap.TILE_SIZE;
+        float bombY = bombRow * GameMap.TILE_SIZE;
+        return new Bomb(bombX, bombY, 1, Bomb.OwnerType.ENEMY, id);
     }
 
-    /**
-     * Devuelve la bomba lanzada (si se lanzó en esta actualización) y la reinicia.
-     */
+
     public Bomb getBomb() {
-        Bomb temp = enemyBomb;
-        enemyBomb = null;
-        return temp;
+        if (enemyBomb != null) {
+            Bomb temp = enemyBomb;
+            enemyBomb = null;
+            return temp;
+        }
+        return null;
     }
+
 
     public void render(SpriteBatch batch) {
         TextureRegion frame = currentAnimation.getKeyFrame(stateTime, true);
@@ -172,9 +178,9 @@ public class Enemy {
 
     public float getX() { return x; }
     public float getY() { return y; }
-
     public boolean isAlive() { return alive; }
     public void kill() { alive = false; }
+    public int getId() { return id; }
 
     public void dispose() {
         animUp.getKeyFrame(0).getTexture().dispose();

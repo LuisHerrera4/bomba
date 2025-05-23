@@ -264,4 +264,7 @@ public class GameScreen implements Screen {
         btnRight.dispose();
         btnBomb.dispose();
     }
+
+
+
 }

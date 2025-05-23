@@ -90,7 +90,6 @@ public class Enemy {
     public void update(float delta, GameMap map, Player player, Array<Enemy> allEnemies) {
         moveTimer += delta;
         if (moveTimer > changeDirectionInterval) chooseNewDirection();
-
         float d = speed * delta;
         float newX = x, newY = y;
 
@@ -101,36 +100,32 @@ public class Enemy {
             case 3: newX += d; break;
         }
 
-        int startCol = (int) (newX / GameMap.TILE_SIZE);
-        int endCol = (int) ((newX + WIDTH - 1) / GameMap.TILE_SIZE);
-        int startRow = (int) (newY / GameMap.TILE_SIZE);
-        int endRow = (int) ((newY + HEIGHT - 1) / GameMap.TILE_SIZE);
-
-        boolean canMove = true;
-        for (int row = startRow; row <= endRow; row++) {
-            for (int col = startCol; col <= endCol; col++) {
-                int cellValue = map.getCell(row, col);
-                if (cellValue != 0) {
-                    canMove = false;
-                    break;
-                }
-            }
-            if (!canMove) break;
-        }
+        boolean canMove = canMoveTo(newX, newY, map);
 
         if (canMove) {
             x = newX;
             y = newY;
         } else {
             chooseNewDirection();
+            // Si está atascado, intentar colocar bomba si es seguro
+            if (bombCooldown <= 0f && isSafeToPlaceBomb(map)) {
+                enemyBomb = placeBomb();
+                bombCooldown = bombCooldownTime;
+            }
         }
 
-        stateTime += delta;
+// Recoger power-ups
+        for (int i = powerUps.size - 1; i >= 0; i--) {
+            PowerUp p = powerUps.get(i);
+            if (checkCollisionWith(p)) {
+                activatePowerUp(p);
+                powerUps.removeIndex(i);
+            }
+        }
 
-        // Buscar objetivo más cercano (jugador o enemigo diferente)
+// Buscar objetivo más cercano
         float targetX = player.getX();
         float targetY = player.getY();
-
         for (Enemy other : allEnemies) {
             if (other != this && other.isAlive()) {
                 float dEn = Vector2.dst(x, y, other.getX(), other.getY());
@@ -146,10 +141,12 @@ public class Enemy {
         float dx = targetX - x;
         float dy = targetY - y;
         float distance = (float) Math.sqrt(dx * dx + dy * dy);
-        if (distance < 5 * GameMap.TILE_SIZE && bombCooldown <= 0f) {
+
+        if (distance < 5 * GameMap.TILE_SIZE && bombCooldown <= 0f && isSafeToPlaceBomb(map)) {
             enemyBomb = placeBomb();
             bombCooldown = bombCooldownTime;
         }
+
     }
 
     public Bomb placeBomb() {
@@ -187,5 +184,49 @@ public class Enemy {
         animDown.getKeyFrame(0).getTexture().dispose();
         animRight.getKeyFrame(0).getTexture().dispose();
         animLeft.getKeyFrame(0).getTexture().dispose();
+    }
+
+    private boolean canMoveTo(float newX, float newY, GameMap map) {
+        int startCol = (int) (newX / GameMap.TILE_SIZE);
+        int endCol = (int) ((newX + WIDTH - 1) / GameMap.TILE_SIZE);
+        int startRow = (int) (newY / GameMap.TILE_SIZE);
+        int endRow = (int) ((newY + HEIGHT - 1) / GameMap.TILE_SIZE);
+
+        pgsql
+            Copiar
+        Editar
+        for (int row = startRow; row <= endRow; row++) {
+            for (int col = startCol; col <= endCol; col++) {
+                int cell = map.getCell(row, col);
+                if (cell != 0) return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean checkCollisionWith(PowerUp p) {
+        return x < p.getX() + 32 && x + 32 > p.getX() &&
+            y < p.getY() + 32 && y + 32 > p.getY();
+    }
+
+    private void activatePowerUp(PowerUp p) {
+        switch (p.getType()) {
+            case SPEED: speed += 20f; break;
+            case BOMB_RADIUS:  break;
+            /* puedes guardar un radius personalizado /
+/ si quieres agregar protección al enemigo */
+            case SHIELD: break;
+        }
+    }
+
+    private boolean isSafeToPlaceBomb(GameMap map) {
+        int col = (int)(x / GameMap.TILE_SIZE);
+        int row = (int)(y / GameMap.TILE_SIZE);
+        int free = 0;
+        if (map.getCell(row + 1, col) == 0) free++;
+        if (map.getCell(row - 1, col) == 0) free++;
+        if (map.getCell(row, col + 1) == 0) free++;
+        if (map.getCell(row, col - 1) == 0) free++;
+        return free >= 1;
     }
 }
